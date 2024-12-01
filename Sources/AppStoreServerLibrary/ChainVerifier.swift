@@ -70,9 +70,10 @@ struct ChainVerifier {
                     return VerificationResult.invalid(VerificationError.VERIFICATION_FAILURE)
                 }
                 // Verify using Vapor
-                let signers = JWTSigners()
-                try signers.use(.es256(key: .public(pem: publicKey.pemRepresentation)))
-                let verifiedBody: VerificationResult<VaporBody> = try VerificationResult<VaporBody>.valid(signers.verify(signedData))
+                let keys = JWTKeyCollection()
+                let key = try ES256PublicKey(pem: publicKey.pemRepresentation)
+                await keys.add(ecdsa: key)
+                let verifiedBody: VerificationResult<VaporBody> = try await VerificationResult<VaporBody>.valid(keys.verify(signedData))
                 switch verifiedBody {
                     case .invalid(_):
                         return VerificationResult.invalid(VerificationError.VERIFICATION_FAILURE)
@@ -100,8 +101,8 @@ struct ChainVerifier {
     }
 }
 
-class VaporBody : JWTPayload {
-    func verify(using signer: JWTKit.JWTSigner) throws {
+class VaporBody : JWTPayload ,@unchecked Sendable {
+    func verify(using algorithm: some JWTAlgorithm) async throws {
         // No-op
     }
 }
@@ -147,7 +148,7 @@ final class Requester: OCSPRequester {
         do {
             let httpClient = HTTPClient()
             defer {
-                try? httpClient.syncShutdown()
+                try? httpClient.shutdown()
             }
             var urlRequest = HTTPClientRequest(url: uri)
             urlRequest.method = .POST

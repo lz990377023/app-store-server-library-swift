@@ -76,7 +76,7 @@ public class AppStoreServerAPIClient {
             }
             
             var urlRequest = HTTPClientRequest(url: url.absoluteString)
-            let token = try generateToken()
+            let token = try await generateToken()
             urlRequest.headers.add(name: "User-Agent", value: AppStoreServerAPIClient.userAgent)
             urlRequest.headers.add(name: "Authorization", value: "Bearer \(token)")
             urlRequest.headers.add(name: "Accept", value: "application/json")
@@ -141,8 +141,9 @@ public class AppStoreServerAPIClient {
         }
     }
         
-    private func generateToken() throws -> String {
-        let signers = JWTSigners()
+    private func generateToken() async throws -> String {
+        
+        let keys = JWTKeyCollection()
         let payload = AppStoreServerAPIJWT(
             exp: .init(value: Date().addingTimeInterval(5 * 60)), // 5 minutes
             iss: .init(value: self.issuerId),
@@ -150,9 +151,9 @@ public class AppStoreServerAPIClient {
             aud: .init(value: AppStoreServerAPIClient.appStoreConnectAudience),
             iat: .init(value: Date())
         )
-        let key: ECDSAKey = try ECDSAKey.private(pem: self.signingKey.pemRepresentation)
-        signers.use(.es256(key: key))
-        return try signers.sign(payload, typ: "JWT", kid: JWKIdentifier(stringLiteral: self.keyId))
+        let key = try ES256PrivateKey(pem: self.signingKey.pemRepresentation)
+        await keys.add(ecdsa: key)
+        return try await keys.sign(payload,kid: JWKIdentifier(stringLiteral: self.keyId))
     }
     
     ///Uses a subscription’s product identifier to extend the renewal date for all of its eligible active subscribers.
@@ -333,7 +334,7 @@ public class AppStoreServerAPIClient {
         var bid: String
         var aud: AudienceClaim
         var iat: IssuedAtClaim
-        func verify(using signer: JWTSigner) throws {
+        func verify(using algorithm: some JWTAlgorithm) async throws {
             fatalError("Do not attempt to locally verify a JWT")
         }
     }
